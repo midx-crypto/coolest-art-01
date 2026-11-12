@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/coolest-art-01/midx-crypto/coolest-art-01/rank.svg)](https://make.fun/bounty/coolest-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=coolest-art-01)
 [![reward](https://make.fun/badge/coolest-art-01/midx-crypto/coolest-art-01/reward.svg)](https://make.fun/bounty/coolest-art-01?utm_source=github&utm_medium=readme&utm_campaign=coolest-art-01)
 
-A fully procedural painting drawn in pure Python stdlib: a lone astronaut on a dark ridge gazes up at a huge banded ringed planet over a burning orange horizon. No model, no network, no image assets — every pixel is computed deterministically, so the program always writes the exact same PNG.
+A fully procedural painting drawn in pure Python stdlib: a colossal whale swims through a burning sunset sky above a tiny sleeping city, watched by one small figure on a rooftop. No model, no network, no image assets — every pixel is computed deterministically, so the program always writes the exact same PNG.
 
 ## Run it
 

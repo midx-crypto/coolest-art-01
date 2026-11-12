@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""coolest-art-01: "The Watcher of the Ringed Giant".
+"""coolest-art-01: "The Sky Whale".
 
 A fully procedural, deterministic painting (Python stdlib only, no network,
-no model, no randomness from the environment): a lone astronaut stands on a
-dark ridge beneath a huge banded ringed planet, over a burning orange horizon.
-Writes /output/entry.png (or $MAKEFUN_OUTPUT_DIR/entry.png), 512x512 PNG.
+no model, no randomness from the environment): a colossal whale swims
+through a burning sunset sky above a tiny sleeping city, watched by one
+small figure on a rooftop. Writes /output/entry.png (or
+$MAKEFUN_OUTPUT_DIR/entry.png), 512x512 PNG.
+
+Idea: a fresh concept the house anchors never show, drawn as a bold flat
+poster - one huge unmistakable silhouette, warm rim light, a single clear
+focal shape that still reads at 300px wide.
 """
 import math
 import os
@@ -15,7 +20,7 @@ W = H = 512
 OUT = os.path.join(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"), "entry.png")
 
 # --- deterministic PRNG (splitmix64, fixed seed) ---------------------------
-_state = [0x9E3779B97F4A7C15]
+_state = [0x51AB3E7719C42D05]
 
 
 def rnd():
@@ -76,25 +81,6 @@ def disc(cx, cy, r, c, alpha=1.0):
         hline(cy + dy, cx - half, cx + half, c, alpha)
 
 
-def ellipse_band(cx, cy, rx, ry, w, c, alpha=1.0, top_only=False, bot_only=False):
-    """Ring between outer ellipse (rx,ry) and inner ellipse (rx-w, ry-w*ry/rx)."""
-    for dy in range(-ry, ry + 1):
-        y = cy + dy
-        if top_only and y >= cy:
-            continue
-        if bot_only and y < cy:
-            continue
-        t = 1.0 - (dy * dy) / float(ry * ry)
-        if t <= 0:
-            continue
-        xo = rx * math.sqrt(t)
-        ri = max(1.0, ry - w * ry / rx)
-        ti = 1.0 - (dy * dy) / float(ri * ri)
-        xi = (rx - w) * math.sqrt(ti) if ti > 0 else 0.0
-        hline(y, cx - xo, cx - xi, c, alpha)
-        hline(y, cx + xi, cx + xo, c, alpha)
-
-
 def poly(points, c, alpha=1.0):
     ys = [p[1] for p in points]
     for y in range(max(0, int(min(ys))), min(H - 1, int(max(ys)) + 1)):
@@ -117,14 +103,56 @@ def line(x0, y0, x1, y1, c, alpha=1.0):
         px(int(x0 + (x1 - x0) * t), int(y0 + (y1 - y0) * t), c, alpha)
 
 
+def catmull(points, samples=10):
+    """Smooth closed/open curve through control points (Catmull-Rom)."""
+    pts = [points[0]] + list(points) + [points[-1]]
+    out = []
+    for i in range(len(pts) - 3):
+        p0, p1, p2, p3 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+        for j in range(samples):
+            t = j / samples
+            t2, t3 = t * t, t * t * t
+            x = 0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t
+                       + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
+                       + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3)
+            y = 0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t
+                       + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
+                       + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
+            out.append((x, y))
+    out.append(points[-1])
+    return out
+
+
+def xform(points, cx, cy, ang_deg, tx, ty):
+    """Rotate points about (cx, cy) by ang_deg, then translate to (tx, ty)."""
+    a = math.radians(ang_deg)
+    ca, sa = math.cos(a), math.sin(a)
+    out = []
+    for (x, y) in points:
+        dx, dy = x - cx, y - cy
+        out.append((tx + dx * ca - dy * sa, ty + dx * sa + dy * ca))
+    return out
+
+
+def bend(points, arch=32, x0=0, x1=390):
+    """Arch the whale like a leaping breach: middle rises, head and tail stay."""
+    return [(x, y - arch * math.sin(math.pi * (x - x0) / (x1 - x0)))
+            for (x, y) in points]
+
+
+def wpts(points, dx=0, dy=0):
+    """Whale-local points -> frame points (bend, rotate, translate)."""
+    return xform(bend(points), WXC, WYC, ANG, WTX + dx, WTY + dy)
+
+
 # --- sky: vertical gradient --------------------------------------------------
 STOPS = [
-    (0.00, (7, 11, 36)),    # deep indigo
-    (0.30, (27, 31, 75)),   # indigo
-    (0.52, (91, 42, 110)),  # violet
-    (0.68, (193, 68, 106)),  # magenta
-    (0.80, (255, 122, 61)),  # burning orange
-    (1.00, (255, 170, 90)),  # horizon glow
+    (0.00, (8, 10, 42)),     # deep indigo
+    (0.28, (30, 26, 78)),    # indigo
+    (0.50, (96, 40, 112)),   # violet
+    (0.66, (198, 64, 104)),  # magenta
+    (0.80, (255, 118, 58)),  # burning orange
+    (1.00, (255, 176, 92)),  # horizon glow
 ]
 for y in range(H):
     t = y / (H - 1)
@@ -139,134 +167,160 @@ for y in range(H):
     for x in range(W):
         row[x * 3], row[x * 3 + 1], row[x * 3 + 2] = col
 
-# --- stars -------------------------------------------------------------------
-for _ in range(240):
+# --- stars (only in the dark upper sky) --------------------------------------
+for _ in range(150):
     x = int(rrange(0, W))
-    y = int(rrange(0, 330))
-    b = rrange(0.35, 1.0)
-    # fade stars out toward the bright horizon
-    b *= max(0.15, 1.0 - y / 420.0)
+    y = int(rrange(0, 170))
+    b = rrange(0.3, 1.0) * max(0.15, 1.0 - y / 220.0)
     col = (int(255 * b), int(240 * b), int(220 * b))
     px(x, y, col, b)
-    if rnd() < 0.06:  # sparkle cross
-        line(x - 3, y, x + 3, y, col, 0.7 * b)
-        line(x, y - 3, x, y + 3, col, 0.7 * b)
+    if rnd() < 0.05:
+        line(x - 3, y, x + 3, y, col, 0.6 * b)
+        line(x, y - 3, x, y + 3, col, 0.6 * b)
 
-# --- shooting star -----------------------------------------------------------
-for i in range(46):
-    t = i / 45.0
-    px(int(88 + i * 2.1), int(52 + i * 1.05), (255, 230, 190), (1 - t) * 0.9)
-    px(int(88 + i * 2.1), int(53 + i * 1.05), (255, 200, 140), (1 - t) * 0.5)
-disc(186, 103, 2, (255, 244, 214))
-
-# --- ringed planet -----------------------------------------------------------
-PCX, PCY, PR = 332, 148, 92
-# halo
-for r in range(PR + 46, PR, -2):
-    disc(PCX, PCY, r, (255, 190, 130), 0.03)
-# back half of the ring (behind the planet)
-ellipse_band(PCX, PCY, 168, 44, 26, (232, 196, 138), 0.92, top_only=True)
-ellipse_band(PCX, PCY, 168, 44, 7, (120, 84, 66), 0.85, top_only=True)
-# planet disc with bands
-BANDS = [
-    (0.00, (250, 214, 164)),
-    (0.16, (238, 178, 128)),
-    (0.30, (250, 222, 178)),
-    (0.44, (198, 110, 82)),
-    (0.58, (247, 203, 150)),
-    (0.72, (226, 158, 116)),
-    (0.86, (250, 226, 186)),
-    (1.00, (240, 190, 140)),
-]
-for dy in range(-PR, PR + 1):
-    t = (dy + PR) / (2.0 * PR)
-    for i in range(len(BANDS) - 1):
-        if BANDS[i][0] <= t <= BANDS[i + 1][0]:
-            f = (t - BANDS[i][0]) / (BANDS[i + 1][0] - BANDS[i][0])
-            col = lerp(BANDS[i][1], BANDS[i + 1][1], f)
-            break
-    # wobble the bands a touch
-    wob = int(3 * math.sin(dy * 0.11))
-    half = int(math.sqrt(max(0, PR * PR - dy * dy)))
-    # shade the night side on the left
-    shade = 0.72 + 0.28 * (0.5 + 0.5 * math.sin(math.atan2(dy, half) + 0.6))
-    col = tuple(int(v * shade) for v in col)
-    hline(PCY + dy, PCX - half + wob, PCX + half + wob, col)
-# terminator shadow: soft dark crescent on the lower-left limb
-for dy in range(-PR, PR + 1):
-    half = int(math.sqrt(max(0, PR * PR - dy * dy)))
-    for dx in range(-half, -half // 3):
-        d = math.sqrt(dx * dx + dy * dy) / PR
-        if d > 0.62:
-            px(PCX + dx, PCY + dy, (40, 26, 60), 0.35 * (d - 0.62) / 0.38)
-# front half of the ring (in front of the planet)
-ellipse_band(PCX, PCY, 168, 44, 26, (240, 206, 150), 0.95, bot_only=True)
-ellipse_band(PCX, PCY, 168, 44, 7, (126, 88, 68), 0.9, bot_only=True)
-# crisp rim light on the planet's upper edge
-for a in range(200, 341, 2):
-    th = math.radians(a)
-    px(int(PCX + PR * math.cos(th)), int(PCY - PR * math.sin(th)),
-       (255, 236, 200), 0.8)
-
-# --- mountains ---------------------------------------------------------------
-def ridge(base_y, amp, seed_off, color, snow=False):
-    pts = [(0, H)]
-    x = 0
-    # seeded jagged ridge via smoothed random walk
-    vals = []
-    v = 0.0
-    for i in range(33):
-        v += rrange(-1, 1)
-        v *= 0.72
-        vals.append(v)
-    peaks = []
-    for i in range(33):
-        x = i * (W / 32.0)
-        y = base_y - amp * (0.45 + 0.55 * (vals[i] + 1.6) / 3.2)
-        pts.append((x, y))
-        peaks.append((x, y))
-    pts.append((W, H))
-    poly(pts, color)
-    if snow:
-        for (x, y) in peaks:
-            if rnd() < 0.75:
-                s = rrange(9, 18)
-                poly([(x - s, y + s * 0.55), (x, y), (x + s, y + s * 0.55)],
-                     (244, 238, 250), 0.95)
+# --- low sun, half-sunk behind the skyline -----------------------------------
+for r in range(58, 0, -2):
+    disc(398, 428, r, (255, 196, 110), 0.05)
+disc(398, 428, 26, (255, 214, 130))
+disc(398, 428, 26, (255, 170, 80), 0.35)
 
 
-ridge(392, 46, 0, (58, 32, 84))          # far ridge, violet
-ridge(430, 62, 1, (24, 14, 44), snow=True)  # near ridge, near-black + snow
+def cloud(cx, cy, s, col, alpha=0.85):
+    """A flat soft cloud: a row of overlapping squashed discs."""
+    for (dx, dy, r) in [(-2.2, 0.15, 1.0), (-1.1, -0.15, 1.25), (0.0, -0.25, 1.45),
+                        (1.1, -0.1, 1.2), (2.2, 0.2, 0.95), (-0.4, 0.3, 1.1),
+                        (0.9, 0.32, 1.0), (-1.7, 0.3, 0.9), (1.7, 0.3, 0.85)]:
+        ex, ey = cx + dx * s, cy + dy * s
+        rx, ry = int(r * s), int(r * s * 0.34)
+        for ddy in range(-ry, ry + 1):
+            half = int(rx * math.sqrt(max(0, 1 - (ddy * ddy) / float(ry * ry))))
+            hline(int(ey + ddy), int(ex - half), int(ex + half), col, alpha)
 
-# --- ground glow + astronaut -------------------------------------------------
-for r in range(42, 0, -2):
-    disc(150, 442, r, (255, 140, 70), 0.06)
-# astronaut silhouette on the near ridge (facing the planet), ~1.35x
-AX, AY = 150, 440
-INK = (12, 8, 24)
-S = 1.35
-def _ax(dx, dy):
-    return int(AX + dx * S), int(AY + dy * S)
-disc(*_ax(0, -35), int(9 * S), INK)                    # helmet
-disc(*_ax(3, -36), int(4 * S), (255, 170, 100), 0.9)  # visor glint
-poly([_ax(-8, -26), _ax(8, -26), _ax(9, 3), _ax(-9, 3)], INK)  # torso
-poly([_ax(-9, 3), _ax(-3, 3), _ax(-5, 22), _ax(-10, 22)], INK)  # left leg
-poly([_ax(3, 3), _ax(9, 3), _ax(10, 22), _ax(5, 22)], INK)  # right leg
-poly([_ax(-12, -24), _ax(-7, -24), _ax(-7, -3), _ax(-12, -3)], INK)  # backpack
-line(*_ax(-8, -16), *_ax(-20, -8), INK)   # left arm
-line(*_ax(8, -16), *_ax(20, -11), INK)   # right arm, raised toward planet
+
+# high clouds, lit pink by the sunset
+cloud(120, 118, 26, (226, 130, 158), 0.42)
+cloud(430, 96, 20, (214, 116, 158), 0.4)
+cloud(255, 78, 16, (200, 110, 160), 0.35)
+# low warm clouds hugging the horizon
+cloud(90, 392, 30, (255, 150, 96), 0.6)
+cloud(300, 408, 24, (255, 164, 110), 0.55)
+cloud(470, 386, 18, (250, 140, 100), 0.5)
+
+# --- the whale ---------------------------------------------------------------
+# Local coords: head at left (x=0), tail at right (x~370), body ~110 tall.
+# Drawn rotated -16 deg so the head dives low-left and the tail rises high-right.
+TOP = [(2, -10), (30, -32), (72, -44), (122, -50), (176, -50),
+       (226, -44), (262, -34), (292, -20), (304, -8)]
+BOT = [(304, -8), (296, 6), (268, 18), (228, 28), (180, 34),
+       (130, 34), (86, 28), (48, 14), (18, 4), (2, 8)]
+BODY = catmull(TOP, 10) + catmull(BOT, 10)
+# tail flukes: swept-back lobes, deep notch, concave trailing edges
+FLUKE = catmull([(294, -12), (330, -34), (368, -56), (392, -60), (362, -30),
+                 (336, -6), (360, 16), (384, 44), (392, 52), (358, 34),
+                 (326, 12), (296, 4)], 8)
+# pectoral fin, shorter and thicker, swept down-back from the belly
+FIN = catmull([(144, 32), (164, 52), (184, 78), (196, 88), (184, 92),
+               (162, 66), (146, 42)], 8)
+# small dorsal fin on the rear back
+DORSAL = catmull([(250, -42), (262, -56), (272, -38), (260, -40)], 6)
+
+RIM = (255, 172, 96)   # warm rim light
+INK = (22, 16, 50)     # whale body, deep indigo-violet
+WXC, WYC = 180, 0       # whale local centre
+WTX, WTY = 252, 262     # where the whale sits in the frame
+ANG = -7
+
+
+def draw_whale(dx, dy, color):
+    """Draw body + flukes + fin + dorsal shifted by (dx, dy) in the colour."""
+    body = wpts(BODY, dx, dy)
+    fluke = wpts(FLUKE, dx, dy)
+    fin = wpts(FIN, dx, dy)
+    dorsal = wpts(DORSAL, dx, dy)
+    poly(fluke, color)
+    poly(fin, color)
+    poly(dorsal, color)
+    poly(body, color)
+
+
+draw_whale(0, -3, RIM)    # rim-light copy peeking out along the top edge
+draw_whale(0, 0, INK)     # body on top, shifted down so the rim shows above
+# belly sheen: a soft warm band hugging the lower body
+BELLY = catmull([(60, 16), (110, 30), (170, 36), (230, 30), (272, 16),
+                 (250, 26), (180, 34), (110, 28)], 8)
+poly(wpts(BELLY), (150, 96, 140), 0.30)
+# mouth line, nearly level along the lower jaw, curving up at the back
+_m1, _m2, _m3 = wpts([(10, 4), (45, 8), (78, 4)])
+line(int(_m1[0]), int(_m1[1]), int(_m2[0]), int(_m2[1]), (230, 170, 150), 0.45)
+line(int(_m2[0]), int(_m2[1]), int(_m3[0]), int(_m3[1]), (230, 170, 150), 0.45)
+# eye: warm dot with a dark pupil
+ex, ey = wpts([(58, -12)])[0]
+disc(int(ex), int(ey), 5, (255, 208, 128))
+disc(int(ex) + 1, int(ey), 2, (20, 12, 40))
+# blowhole spout: a classic V - two bright diverging streams of droplets
+bx, by = wpts([(104, -48)])[0]
+bx, by = int(bx), int(by)
+disc(bx, by - 2, 6, (255, 230, 195), 0.30)   # glow at the blowhole
+for base_a in (-1.95, -1.15):
+    for i in range(42):
+        d = rrange(6, 58)
+        a = base_a + rrange(-0.08, 0.08)
+        sx = int(bx + math.cos(a) * d * 0.6)
+        sy = int(by + math.sin(a) * d)
+        px(sx, sy, (255, 242, 214), max(0.35, 0.95 - d / 60.0))
+        px(sx + 1, sy, (255, 242, 214), 0.7)
+        if rnd() < 0.3:
+            px(sx, sy + 1, (255, 242, 214), 0.6)
+
+# --- birds -------------------------------------------------------------------
+for (bx0, by0, s) in [(150, 168, 7), (178, 150, 6), (205, 172, 5),
+                      (392, 210, 6), (420, 188, 5), (88, 210, 5)]:
+    line(bx0 - s, by0, bx0, by0 - int(s * 0.55), (26, 16, 52), 0.9)
+    line(bx0, by0 - int(s * 0.55), bx0 + s, by0, (26, 16, 52), 0.9)
+
+# --- city skyline ------------------------------------------------------------
+CITY = (14, 9, 32)
+x = -6
+while x < W + 6:
+    bw = int(rrange(16, 42))
+    bh = int(rrange(18, 66))
+    if rnd() < 0.14:  # a tower with a spire
+        bh = int(rrange(72, 104))
+    poly([(x, H), (x, H - bh), (x + bw, H - bh), (x + bw, H)], CITY)
+    if bh > 70:  # spire + warning light
+        line(x + bw // 2, H - bh, x + bw // 2, H - bh - 16, CITY)
+        disc(x + bw // 2, H - bh - 17, 2, (255, 80, 70))
+    # lit windows
+    for wy in range(H - bh + 6, H - 6, 9):
+        for wx in range(x + 4, x + bw - 3, 8):
+            if rnd() < 0.34:
+                px(wx, wy, (255, 196, 110), rrange(0.5, 0.95))
+                px(wx + 1, wy, (255, 196, 110), 0.5)
+    x += bw + int(rrange(2, 9))
+
+# --- the watcher: one small figure on a rooftop, arm raised ------------------
+# a tall rooftop jutting from the lower-left corner, so the figure reads
+poly([(0, 512), (0, 452), (112, 452), (112, 512)], (10, 7, 26))
+poly([(112, 452), (112, 446), (146, 446), (146, 512), (112, 512)], (10, 7, 26))
+for r in range(20, 0, -2):
+    disc(58, 448, r, (255, 150, 80), 0.05)   # faint warm glow around the figure
+FX, FY = 58, 450
+FINK = (8, 5, 20)
+disc(FX, FY - 19, 4, FINK)                                  # head
+poly([(FX - 4, FY - 15), (FX + 4, FY - 15), (FX + 5, FY), (FX - 5, FY)], FINK)
+line(FX - 3, FY, FX - 5, FY + 11, FINK)                     # legs
+line(FX + 3, FY, FX + 5, FY + 11, FINK)
+line(FX + 4, FY - 12, FX + 14, FY - 20, FINK)               # raised arm
+disc(FX + 15, FY - 21, 2, (255, 200, 120), 0.95)            # tiny warm hand
 
 # --- vignette + grain ---------------------------------------------------------
-for y in range(H):
-    for x in (0, 1, W - 2, W - 1):
-        pass
 for y in range(H):
     dy = (y - H / 2) / (H / 2)
     for x in range(W):
         dx = (x - W / 2) / (W / 2)
         d = math.sqrt(dx * dx + dy * dy)
         if d > 0.85:
-            px(x, y, (5, 4, 18), min(0.35, (d - 0.85) * 1.2))
+            px(x, y, (5, 4, 18), min(0.32, (d - 0.85) * 1.2))
 for _ in range(9000):
     x = int(rrange(0, W))
     y = int(rrange(0, H))
